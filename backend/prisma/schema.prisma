@@ -1,0 +1,205 @@
+// Configurazione del database: si utilizza PostgreSQL come provider
+// L'URL di connessione viene letto dalla variabile d'ambiente DATABASE_URL
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Generatore del client Prisma per JavaScript/TypeScript
+// Genera il client tipizzato che viene usato nei service per interagire con il DB
+generator client {
+  provider = "prisma-client-js"
+}
+
+// Modello Autista: rappresenta un utente registrato come guidatore
+// Contiene i dati anagrafici, le credenziali di accesso e i dati della patente
+model Autista {
+  // Chiave primaria: il codice fiscale identifica univocamente ogni autista
+  codiceFiscale   String   @id @db.VarChar(30)
+  // Numero di patente di guida
+  numPatente      Int
+  // Numero di telefono (max 15 caratteri)
+  telefono        String   @db.VarChar(15)
+  // Email univoca dell'autista usata per il login
+  emailA          String   @unique @db.VarChar(40)
+  // Password hashata (max 255 caratteri per supportare hash bcrypt)
+  password        String   @db.VarChar(255)
+  // Foto profilo salvata come dati binari (opzionale, deprecata in favore di fotoUrl)
+  foto            Bytes?
+  // Descrizione/bio dell'autista visibile nel profilo pubblico (opzionale)
+  descrizione     String?  @db.VarChar(300)
+  // URL della foto profilo (alternativa a foto binaria, opzionale)
+  fotoUrl         String?  @db.Text
+  // Data di scadenza della patente (solo la data, senza orario)
+  scadenzaPatente DateTime @db.Date
+  // Nome dell'autista
+  nome            String   @db.VarChar(15)
+  // Cognome dell'autista
+  cognome         String   @db.VarChar(15)
+
+  // Relazione uno-a-molti: un autista può avere più macchine registrate
+  macchine  Macchina[]
+  // Relazione uno-a-molti: un autista può pubblicare più viaggi
+  viaggi    Viaggio[]
+  // Relazione uno-a-molti: feedback ricevuti dall'autista (dai passeggeri)
+  // La relazione è nominata "FeedbackAutista" per distinguerla dall'altra direzione
+  feedbackA Feedback[] @relation("FeedbackAutista")
+
+  // Mappa il modello alla tabella "autista" nel database
+  @@map("autista")
+}
+
+// Modello Passeggero: rappresenta un utente registrato come passeggero
+// Può cercare viaggi, prenotare posti e ricevere/lasciare feedback
+model Passeggero {
+  // Chiave primaria: il codice fiscale identifica univocamente ogni passeggero
+  codiceFiscale String @id @db.VarChar(30)
+  // Email univoca del passeggero usata per il login
+  emailP        String @unique @db.VarChar(30)
+  // Password hashata
+  password      String @db.VarChar(255)
+  // Numero di telefono
+  telefono      String @db.VarChar(15)
+  // Nome del passeggero
+  nome          String  @db.VarChar(20)
+  // Cognome del passeggero
+  cognome       String  @db.VarChar(20)
+  // Descrizione/bio del passeggero (opzionale)
+  descrizione   String? @db.VarChar(300)
+  // URL della foto profilo (opzionale)
+  fotoUrl       String? @db.Text
+
+  // Relazione uno-a-molti: un passeggero può avere più prenotazioni
+  prenotazioni Prenotazione[]
+  // Relazione uno-a-molti: feedback ricevuti dal passeggero (dagli autisti)
+  // La relazione è nominata "FeedbackPasseggero" per distinguerla dall'altra direzione
+  feedbackP    Feedback[]     @relation("FeedbackPasseggero")
+
+  // Mappa il modello alla tabella "passeggero" nel database
+  @@map("passeggero")
+}
+
+// Modello Macchina: rappresenta un veicolo registrato da un autista
+// Ogni macchina è associata a un autista tramite il codice fiscale
+model Macchina {
+  // Chiave primaria: la targa identifica univocamente ogni veicolo
+  targa          String @id @db.VarChar(15)
+  // Marca del veicolo (es. "Fiat", "Ford")
+  marca          String @db.VarChar(20)
+  // Modello del veicolo (es. "Panda", "Focus")
+  modello        String @db.VarChar(20)
+  // Numero massimo di posti disponibili nel veicolo
+  nPosti         Int
+  // Codice fiscale dell'autista proprietario del veicolo
+  codiceFiscaleA String @db.VarChar(30)
+
+  // Relazione molti-a-uno: la macchina appartiene a un autista
+  autista Autista @relation(fields: [codiceFiscaleA], references: [codiceFiscale])
+  // Relazione uno-a-molti: una macchina può essere usata in più viaggi
+  viaggi  Viaggio[]
+
+  // Mappa il modello alla tabella "macchina" nel database
+  @@map("macchina")
+}
+
+// Modello Viaggio: rappresenta un viaggio condiviso pubblicato da un autista
+// Contiene tutte le informazioni sul percorso, costi e preferenze
+model Viaggio {
+  // Chiave primaria auto-incrementante
+  idViaggio      Int      @id @default(autoincrement())
+  // Città di partenza
+  cittaP         String   @db.VarChar(30)
+  // Città di destinazione
+  cittaD         String   @db.VarChar(30)
+  // Data e ora di partenza del viaggio
+  dataOra        DateTime
+  // Costo per passeggero in euro (intero)
+  costo          Int
+  // Durata stimata del viaggio in minuti
+  tempo          Int
+  // Se true, i passeggeri possono portare bagagli
+  bagagli        Boolean
+  // Se true, sono ammessi animali domestici
+  animali        Boolean
+  // Numero massimo di posti disponibili per i passeggeri
+  nPosti         Int
+  // Codice fiscale dell'autista che pubblica il viaggio
+  codiceFiscaleA String   @db.VarChar(30)
+  // Se true, il viaggio è chiuso a nuove prenotazioni (default false)
+  chiuso         Boolean  @default(false)
+  // Lista delle tappe intermedie del percorso (array di stringhe)
+  tappe          String[]
+  // Targa del veicolo usato per il viaggio (opzionale)
+  targa          String?  @db.VarChar(15)
+
+  // Relazione molti-a-uno: il viaggio è gestito da un autista
+  autista      Autista        @relation(fields: [codiceFiscaleA], references: [codiceFiscale])
+  // Relazione molti-a-uno: il viaggio usa opzionalmente una macchina specifica
+  macchina     Macchina?      @relation(fields: [targa], references: [targa])
+  // Relazione uno-a-molti: un viaggio può avere più prenotazioni
+  prenotazioni Prenotazione[]
+  // Relazione uno-a-molti: un viaggio può avere più feedback
+  feedback     Feedback[]
+
+  // Mappa il modello alla tabella "viaggio" nel database
+  @@map("viaggio")
+}
+
+// Modello Prenotazione: rappresenta la richiesta di un passeggero di partecipare a un viaggio
+// Lo stato evolve da "pending" ad "accepted" o "rejected" tramite la decisione dell'autista
+model Prenotazione {
+  // Chiave primaria auto-incrementante
+  idPrenotazione Int      @id @default(autoincrement())
+  // Data in cui è stata effettuata la prenotazione (solo data, senza orario)
+  data           DateTime @db.Date
+  // Stato della prenotazione: "pending" (in attesa), "accepted" (accettata), "rejected" (rifiutata)
+  stato          String   @default("pending") @db.VarChar(10)
+  // Riferimento al viaggio prenotato
+  idViaggio      Int
+  // Codice fiscale del passeggero che ha effettuato la prenotazione
+  codiceFiscaleP String   @db.VarChar(30)
+  // Messaggio opzionale che il passeggero può inviare all'autista
+  messaggio      String?  @db.VarChar(300)
+
+  // Relazione molti-a-uno: la prenotazione è associata a un viaggio
+  viaggio    Viaggio    @relation(fields: [idViaggio], references: [idViaggio])
+  // Relazione molti-a-uno: la prenotazione è effettuata da un passeggero
+  passeggero Passeggero @relation(fields: [codiceFiscaleP], references: [codiceFiscale])
+
+  // Mappa il modello alla tabella "prenotazioni" nel database
+  @@map("prenotazioni")
+}
+
+// Modello Feedback: rappresenta una recensione lasciata dopo un viaggio
+// La direzione indica chi ha scritto la recensione:
+//   - direzione = true: il passeggero ha recensito l'autista
+//   - direzione = false: l'autista ha recensito il passeggero
+model Feedback {
+  // Chiave primaria auto-incrementante
+  id             Int     @id @default(autoincrement())
+  // Voto numerico (da 1 a 5)
+  voto           Int
+  // Testo della recensione (max 200 caratteri)
+  giudizio       String  @db.VarChar(200)
+  // Direzione della recensione: true = passeggero→autista, false = autista→passeggero
+  direzione      Boolean
+  // Codice fiscale del passeggero coinvolto nel feedback
+  codiceFiscaleP String  @db.VarChar(30)
+  // Codice fiscale dell'autista coinvolto nel feedback
+  codiceFiscaleA String  @db.VarChar(30)
+  // Riferimento al viaggio a cui si riferisce il feedback
+  idViaggio      Int
+
+  // Relazione molti-a-uno: feedback associato al passeggero (nominato "FeedbackPasseggero")
+  passeggero Passeggero @relation("FeedbackPasseggero", fields: [codiceFiscaleP], references: [codiceFiscale])
+  // Relazione molti-a-uno: feedback associato all'autista (nominato "FeedbackAutista")
+  autista    Autista    @relation("FeedbackAutista", fields: [codiceFiscaleA], references: [codiceFiscale])
+  // Relazione molti-a-uno: feedback riferito a un viaggio specifico
+  viaggio    Viaggio    @relation(fields: [idViaggio], references: [idViaggio])
+
+  // Vincolo di unicità: ogni coppia passeggero-autista può lasciare al massimo un feedback
+  // per ciascuna direzione nello stesso viaggio (evita duplicati)
+  @@unique([codiceFiscaleP, codiceFiscaleA, idViaggio, direzione])
+  // Mappa il modello alla tabella "feedback" nel database
+  @@map("feedback")
+}
